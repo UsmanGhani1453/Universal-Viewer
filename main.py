@@ -15,9 +15,9 @@ class UniversalViewer:
         toolbar = tk.Frame(root, bg="#f0f0f0", bd=1, relief=tk.RAISED)
         toolbar.pack(side=tk.TOP, fill=tk.X)
 
-        tk.Button(toolbar, text="Open File", command=self.open_file).pack(side=tk.LEFT, padx=5, pady=5)
-        tk.Button(toolbar, text="< Prev", command=self.prev_page).pack(side=tk.LEFT, padx=5, pady=5)
-        tk.Button(toolbar, text="Next >", command=self.next_page).pack(side=tk.LEFT, padx=5, pady=5)
+        tk.Button(toolbar, text="Open File", command=self.open_file).pack(side=tk.LEFT)
+        tk.Button(toolbar, text="< Prev", command=self.prev_page).pack(side=tk.LEFT)
+        tk.Button(toolbar, text="Next >", command=self.next_page).pack(side=tk.LEFT)
 
         self.search_var = tk.StringVar()
         self.search_var.trace_add("write", lambda *args: self.display_page())
