@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import filedialog, messagebox
-import fitz  # PyMuPDF                                                                                              #type:ignore
-from PIL import Image, ImageTk                                                                                            #type:ignore
+import fitz                                                                                                                                                            #type:ignore
+from PIL import Image, ImageTk                                                                                                                                                         #type:ignore
 
 class UniversalViewer:
     def __init__(self, root):
