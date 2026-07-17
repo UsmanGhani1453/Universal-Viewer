@@ -45,12 +45,79 @@ class UniversalViewer:
         self.canvas.bind_all("<MouseWheel>", self._on_mousewheel)
         self.canvas.bind_all("<Button-4>", self._on_mousewheel) 
         self.canvas.bind_all("<Button-5>", self._on_mousewheel) 
+        
+        # Bind left-click for table extraction
+        self.canvas.bind("<Button-1>", self._on_canvas_click)
 
     def _on_mousewheel(self, event):
         if event.num == 4 or event.delta > 0:
             self.canvas.yview_scroll(-1, "units")
         elif event.num == 5 or event.delta < 0:
             self.canvas.yview_scroll(1, "units")
+
+    def _on_canvas_click(self, event):
+        if not self.doc:
+            return
+
+        cx = self.canvas.canvasx(event.x)
+        cy = self.canvas.canvasy(event.y)
+
+        scale_factor = 1.5
+        pdf_x = cx / scale_factor
+        pdf_y = cy / scale_factor
+
+        self.extract_column_data(pdf_x, pdf_y)
+
+    def extract_column_data(self, x, y):
+        if not self.doc:
+            return
+            
+        page = self.doc[self.current_page]
+        
+        tables = page.find_tables()
+        
+        if not tables:
+            return
+        
+        for table in tables:
+            tx0, ty0, tx1, ty1 = table.bbox
+            
+            if tx0 <= x <= tx1 and ty0 <= y <= ty1:
+                
+                clicked_col_index = -1
+                
+                if not hasattr(table, 'rows') or not table.rows:
+                    continue
+                    
+                first_row_cells = table.rows[0].cells
+                
+                for col_idx, cell_bbox in enumerate(first_row_cells):
+                    if cell_bbox is None: 
+                        continue
+                    
+                    cx0, cy0, cx1, cy1 = cell_bbox
+                    
+                    if cx0 <= x <= cx1:
+                        clicked_col_index = col_idx
+                        break
+                
+                if clicked_col_index != -1:
+                    extracted_data = []
+                    
+                    table_data = table.extract()
+                    
+                    for row in table_data:
+                        if row and len(row) > clicked_col_index:
+                            cell_text = row[clicked_col_index]
+                            
+                            if cell_text is not None and str(cell_text).strip():
+                                extracted_data.append(str(cell_text).replace('\n', ' ').strip())
+                    
+                    if extracted_data:
+                        result_text = f"Extracted {len(extracted_data)} items from column {clicked_col_index + 1}:\n\n"
+                        result_text += "\n".join(extracted_data)   
+                        messagebox.showinfo("Column Data Extracted", result_text)
+                    return
 
     def open_file(self):
         filetypes = [
