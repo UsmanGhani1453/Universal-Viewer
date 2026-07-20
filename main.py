@@ -1,6 +1,6 @@
 import tkinter as tk
-from tkinter import filedialog, messagebox
-import fitz                                                                                                                                                            #type:ignore
+from tkinter import filedialog, messagebox, simpledialog
+import fitz                                                                                                                                                            
 from PIL import Image, ImageTk                                                                                                                                                         #type:ignore
 
 class UniversalViewer:
@@ -48,6 +48,9 @@ class UniversalViewer:
         
         # Bind left-click for table extraction
         self.canvas.bind("<Button-1>", self._on_canvas_click)
+        
+        # Bind right-click for text editing
+        self.canvas.bind("<Button-3>", self._on_right_click)
 
     def _on_mousewheel(self, event):
         if event.num == 4 or event.delta > 0:
@@ -59,33 +62,42 @@ class UniversalViewer:
         if not self.doc:
             return
 
+        # 1. Capture absolute canvas coordinates (accounting for scrollbars)
         cx = self.canvas.canvasx(event.x)
         cy = self.canvas.canvasy(event.y)
 
+        # 2. Apply coordinate transformation (Reverse the 1.5x zoom matrix)
         scale_factor = 1.5
         pdf_x = cx / scale_factor
         pdf_y = cy / scale_factor
 
+        # 3. Trigger the extraction logic
         self.extract_column_data(pdf_x, pdf_y)
 
     def extract_column_data(self, x, y):
+        # Guard to ensure the document exists
         if not self.doc:
             return
             
         page = self.doc[self.current_page]
         
+        # Scan the page for tabular structures
         tables = page.find_tables()
         
+        # Guard to prevent crashes if no tables are found
         if not tables:
             return
         
         for table in tables:
+            # table.bbox contains (x0, y0, x1, y1) bounding box of the entire table
             tx0, ty0, tx1, ty1 = table.bbox
             
+            # Check if the click falls inside this table's boundaries
             if tx0 <= x <= tx1 and ty0 <= y <= ty1:
                 
                 clicked_col_index = -1
                 
+                # Safely access the first row using PyMuPDF's .rows property
                 if not hasattr(table, 'rows') or not table.rows:
                     continue
                     
@@ -95,29 +107,107 @@ class UniversalViewer:
                     if cell_bbox is None: 
                         continue
                     
+                    # Unpack the bounding box for this specific column cell
                     cx0, cy0, cx1, cy1 = cell_bbox
                     
+                    # If the click's X coordinate is within this column's width
                     if cx0 <= x <= cx1:
                         clicked_col_index = col_idx
                         break
                 
+                # If a valid column was identified, extract the text
                 if clicked_col_index != -1:
                     extracted_data = []
                     
                     table_data = table.extract()
                     
                     for row in table_data:
+                        # Ensure the row has data for this column index
                         if row and len(row) > clicked_col_index:
                             cell_text = row[clicked_col_index]
                             
+                            # Clean up newlines and ensure it is not an empty string
                             if cell_text is not None and str(cell_text).strip():
                                 extracted_data.append(str(cell_text).replace('\n', ' ').strip())
                     
+                    # Display the results in a message box
                     if extracted_data:
                         result_text = f"Extracted {len(extracted_data)} items from column {clicked_col_index + 1}:\n\n"
-                        result_text += "\n".join(extracted_data)   
+                        
+                        # Join ALL items in the list without the [:15] slice
+                        result_text += "\n".join(extracted_data) 
+                        
                         messagebox.showinfo("Column Data Extracted", result_text)
-                    return
+                    return # Exit after processing the clicked table
+
+    def _on_right_click(self, event):
+        print(f"Right-click registered at Canvas X:{event.x}, Y:{event.y}")
+        
+        # Only allow editing on PDFs
+        if not self.doc:
+            print("Error: No document is currently open.")
+            return
+        if not self.doc.is_pdf:
+            print("Error: This file is not a PDF. Editing is disabled.")
+            return
+
+        # 1. Capture absolute canvas coordinates
+        cx = self.canvas.canvasx(event.x)
+        cy = self.canvas.canvasy(event.y)
+
+        # 2. Reverse the 1.5x zoom matrix
+        scale_factor = 1.5
+        pdf_x = cx / scale_factor
+        pdf_y = cy / scale_factor
+
+        print(f"Translating to PDF coordinates - X:{pdf_x}, Y:{pdf_y}")
+
+        # 3. Trigger the text replacement logic
+        self.edit_pdf_text(pdf_x, pdf_y)
+
+    def edit_pdf_text(self, x, y):
+        page = self.doc[self.current_page]  #type:ignore
+        words = page.get_text("words")
+        
+        word_found = False
+        padding = 3 # Adds a 3-pixel invisible buffer around words to make clicking easier
+        
+        for w in words:
+            # Unpack the word data
+            x0, y0, x1, y1, text, block_no, line_no, word_no = w
+            
+            # Check if the right-click falls inside this word's padded boundaries
+            if (x0 - padding) <= x <= (x1 + padding) and (y0 - padding) <= y <= (y1 + padding):#type:ignore
+                print(f"Target locked! You clicked on the word: '{text}'")
+                word_found = True
+                
+                # Prompt the user for the new text
+                new_text = simpledialog.askstring("Edit Text", f"Replace '{text}' with:")
+                
+                if new_text is not None:
+                    try:
+                        # 1. Whiteout (redact) the original word completely
+                        page.add_redact_annot((x0, y0, x1, y1))
+                        page.apply_redactions()
+                        
+                        # 2. Insert the new text at the same baseline coordinates
+                        page.insert_text((x0, y1 - 2), new_text, fontsize=11, color=(0, 0, 0))  #type:ignore
+                        
+                        # 3. Save changes directly to the original file
+                        self.doc.saveIncr()  #type:ignore
+                        print("Success: Original PDF file updated on the hard drive.")
+                        
+                        # 4. Refresh the canvas to render the edit
+                        self.display_page()
+                        
+                    except Exception as e:
+                        print(f"Critical Save Error: {e}")
+                        messagebox.showerror("Save Error", f"Could not update the original file.\nError: {e}")
+                
+                return # Exit loop once the target word is processed
+        
+        if not word_found:
+            print("Missed! The click did not hit a word bounding box.")
 
     def open_file(self):
         filetypes = [
