@@ -45,6 +45,10 @@ class UniversalViewer:
         tk.Label(toolbar, text="| Native:").pack(side=tk.LEFT, padx=(10, 5))
         tk.Button(toolbar, text="↻ Refresh Preview", command=self.refresh_document).pack(side=tk.LEFT, padx=2)
 
+        self.status_var = tk.StringVar(value=" Ready | Please open a document.")
+        status_bar = tk.Label(root, textvariable=self.status_var, bd=1, relief=tk.SUNKEN, anchor=tk.W, bg="#e8e8e8", font=("Arial", 9))
+        status_bar.pack(side=tk.BOTTOM, fill=tk.X)
+
         display_frame = tk.Frame(root)
         display_frame.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True)
 
@@ -411,6 +415,12 @@ class UniversalViewer:
         self.canvas.delete("all")
         self.canvas.create_image(0, 0, anchor=tk.NW, image=self.photo)
         self.canvas.config(scrollregion=(0, 0, pix.width, pix.height))
+
+        import os
+        filename = os.path.basename(self.original_filepath) if self.original_filepath else "Unknown File"
+        total_pages = len(self.doc)
+        current = self.current_page + 1
+        self.status_var.set(f" File: {filename}   |   Page {current} of {total_pages}")
 
     def prev_page(self):
         if self.doc and self.current_page > 0:
